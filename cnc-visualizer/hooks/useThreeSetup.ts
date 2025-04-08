@@ -6,31 +6,58 @@ interface UseThreeSetupProps {
   stlFile: File | null;
 }
 
+// Default model path
+const DEFAULT_STL_PATH = '/models/dragon.stl';
+
 export const useThreeSetup = ({ stlFile }: UseThreeSetupProps) => {
   const [model, setModel] = useState<THREE.Mesh | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Store model in ref to avoid dependency cycle
+  const modelRef = useRef<THREE.Mesh | null>(null);
 
   // Cleanup function for the model
   const cleanupModel = useCallback((modelToCleanup: THREE.Mesh | null) => {
     if (modelToCleanup) {
       modelToCleanup.geometry.dispose();
-      (modelToCleanup.material as THREE.Material).dispose();
+      if (Array.isArray(modelToCleanup.material)) {
+        for (const mat of modelToCleanup.material) {
+          mat.dispose();
+        }
+      } else {
+        (modelToCleanup.material as THREE.Material).dispose();
+      }
     }
   }, []);
 
   useEffect(() => {
-    if (!stlFile) return;
+    // Update ref when model changes
+    modelRef.current = model;
+  }, [model]);
 
-    setIsLoading(true);
-    setError(null);
+  useEffect(() => {
+    // Use ref to get previous model state
+    const previousModel = modelRef.current;
+    
+    const loadModel = async () => {
+      setIsLoading(true);
+      setError(null);
+      setModel(null); // Clear current model
 
-    const loader = new STLLoader();
-    const reader = new FileReader();
-
-    reader.onload = async (event) => {
       try {
-        const geometry = loader.parse(event.target?.result as ArrayBuffer);
+        const loader = new STLLoader();
+        let geometry: THREE.BufferGeometry;
+
+        if (stlFile) {
+          // Load from uploaded file
+          const arrayBuffer = await stlFile.arrayBuffer();
+          geometry = loader.parse(arrayBuffer);
+        } else {
+          // Load default file
+          geometry = await loader.loadAsync(DEFAULT_STL_PATH);
+        }
+        
         const material = new THREE.MeshPhongMaterial({
           color: 0xaaaaaa,
           specular: 0x111111,
@@ -38,40 +65,29 @@ export const useThreeSetup = ({ stlFile }: UseThreeSetupProps) => {
         });
 
         const mesh = new THREE.Mesh(geometry, material);
-        mesh.rotation.x = -Math.PI / 2;
-        mesh.scale.set(0.1, 0.1, 0.1);
 
-        // Center the model
-        geometry.computeBoundingBox();
-        const boundingBox = geometry.boundingBox;
-        if (boundingBox) {
-          const center = new THREE.Vector3();
-          boundingBox.getCenter(center);
-          mesh.position.sub(center);
-        }
-
-        // Cleanup previous model before setting new one
-        cleanupModel(model);
+        // Cleanup previous model *after* loading/parsing is successful
+        cleanupModel(previousModel);
         setModel(mesh);
-        setIsLoading(false);
+        setError(null); 
+
       } catch (err) {
-        setError('Failed to load STL file');
-        setIsLoading(false);
+        console.error("Error loading STL:", err);
+        setError(`Failed to load STL: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        cleanupModel(previousModel); // Cleanup if loading fails
+        setModel(null); // Ensure model is null on error
+      } finally {
+        setIsLoading(false); // Always stop loading
       }
     };
 
-    reader.onerror = () => {
-      setError('Failed to read file');
-      setIsLoading(false);
-    };
+    loadModel();
 
-    reader.readAsArrayBuffer(stlFile);
-
-    // Cleanup on unmount or when stlFile changes
+    // Return cleanup function
     return () => {
-      cleanupModel(model);
+      cleanupModel(previousModel);
     };
-  }, [stlFile, model, cleanupModel]);
+  }, [stlFile, cleanupModel]); // Removed model dependency
 
   return { model, isLoading, error };
 }; 

@@ -27,13 +27,13 @@ export const CNCVisualizer: React.FC = () => {
   const handleClearGcode = () => setGcodeFile(null);
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50">
-      <header className="bg-gray-800 text-white py-4 px-6 shadow-lg z-10">
+    <div className="fixed inset-0 flex flex-col overflow-hidden">
+      <header className="flex-none bg-gray-800 text-white py-4 px-6 shadow-lg z-10">
         <h1 className="text-2xl font-bold">CNC Path Visualizer</h1>
       </header>
 
-      <main className="flex flex-1 min-h-0">
-        <aside className="w-80 bg-white shadow-lg flex-shrink-0 overflow-y-auto border-r border-gray-200">
+      <main className="flex-1 flex min-h-0">
+        <aside className="w-80 bg-white shadow-lg flex-none overflow-y-auto border-r border-gray-200">
           <div className="p-6 space-y-6">
             <section>
               <h2 className="text-lg font-semibold text-gray-800 mb-4">Upload Files</h2>
@@ -46,19 +46,22 @@ export const CNCVisualizer: React.FC = () => {
                     STL Model
                   </label>
                   <div className="flex flex-col gap-2">
-                    <div className="relative">
+                    <div className="flex items-center gap-2">
+                      <label 
+                        htmlFor="stl-upload"
+                        className="py-2 px-4 bg-gray-100 text-gray-700 text-sm font-semibold rounded-md hover:bg-gray-200 cursor-pointer"
+                      >
+                        Choose File
+                      </label>
+                      <span className="text-sm text-gray-500">
+                        {stlFile ? stlFile.name : 'No File Chosen'}
+                      </span>
                       <input
                         id="stl-upload"
                         type="file"
                         accept=".stl"
                         onChange={handleStlUpload}
-                        className="block w-full text-sm text-gray-500
-                          file:mr-4 file:py-2 file:px-4
-                          file:rounded-md file:border-0
-                          file:text-sm file:font-semibold
-                          file:bg-gray-100 file:text-gray-700
-                          hover:file:bg-gray-200
-                          cursor-pointer"
+                        className="hidden"
                       />
                     </div>
                     {stlFile && (
@@ -86,19 +89,22 @@ export const CNCVisualizer: React.FC = () => {
                     G-code Path
                   </label>
                   <div className="flex flex-col gap-2">
-                    <div className="relative">
+                    <div className="flex items-center gap-2">
+                      <label 
+                        htmlFor="gcode-upload"
+                        className="py-2 px-4 bg-gray-100 text-gray-700 text-sm font-semibold rounded-md hover:bg-gray-200 cursor-pointer"
+                      >
+                        Choose File
+                      </label>
+                      <span className="text-sm text-gray-500">
+                        {gcodeFile ? gcodeFile.name : 'No File Chosen'}
+                      </span>
                       <input
                         id="gcode-upload"
                         type="file"
                         accept=".gcode"
                         onChange={handleGcodeUpload}
-                        className="block w-full text-sm text-gray-500
-                          file:mr-4 file:py-2 file:px-4
-                          file:rounded-md file:border-0
-                          file:text-sm file:font-semibold
-                          file:bg-gray-100 file:text-gray-700
-                          hover:file:bg-gray-200
-                          cursor-pointer"
+                        className="hidden"
                       />
                     </div>
                     {gcodeFile && (
@@ -149,7 +155,7 @@ export const CNCVisualizer: React.FC = () => {
           </div>
         </aside>
 
-        <div className="flex-1 relative min-w-0">
+        <div className="flex-1 relative">
           <Scene stlFile={stlFile} gcodeFile={gcodeFile} />
         </div>
       </main>

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import * as THREE from 'three';
 
 interface GCodeCommand {
@@ -12,10 +12,21 @@ interface UseGCodeParserProps {
   gcodeFile: File | null;
 }
 
+// Default G-code path
+const DEFAULT_GCODE_PATH = '/models/test.gcode';
+
 export const useGCodeParser = ({ gcodeFile }: UseGCodeParserProps) => {
   const [toolPath, setToolPath] = useState<THREE.Line | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Use ref to track toolPath for cleanup
+  const toolPathRef = useRef<THREE.Line | null>(null);
+
+  // Update ref when toolPath changes
+  useEffect(() => {
+    toolPathRef.current = toolPath;
+  }, [toolPath]);
 
   // Cleanup function for the tool path
   const cleanupToolPath = useCallback((path: THREE.Line | null) => {
@@ -82,47 +93,67 @@ export const useGCodeParser = ({ gcodeFile }: UseGCodeParserProps) => {
       }
     }
 
+    // Ensure we have at least 2 points for a valid line
+    if (points.length < 2) {
+      // Create a small default path if no valid path exists
+      points.push(new THREE.Vector3(-10, 0, 0));
+      points.push(new THREE.Vector3(10, 0, 0));
+    }
+
     const geometry = new THREE.BufferGeometry().setFromPoints(points);
-    const material = new THREE.LineBasicMaterial({ color: 0xff0000 });
+    const material = new THREE.LineBasicMaterial({ 
+      color: 0xff0000, 
+      linewidth: 2 
+    });
     return new THREE.Line(geometry, material);
   }, []);
 
   useEffect(() => {
-    if (!gcodeFile) return;
+    // Use ref to get previous path for cleanup
+    const previousPath = toolPathRef.current;
+    
+    const loadPath = async () => {
+      setIsLoading(true);
+      setError(null);
+      setToolPath(null); // Clear current path
 
-    setIsLoading(true);
-    setError(null);
-
-    const reader = new FileReader();
-
-    reader.onload = (event) => {
       try {
-        const content = event.target?.result as string;
+        let content: string;
+        if (gcodeFile) {
+          // Load from uploaded file
+          content = await gcodeFile.text();
+        } else {
+          // Load default file
+          const response = await fetch(DEFAULT_GCODE_PATH);
+          if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+          content = await response.text();
+        }
+
         const commands = parseGCode(content);
         const path = createToolPath(commands);
 
-        // Cleanup previous path before setting new one
-        cleanupToolPath(toolPath);
+        // Cleanup previous path *after* loading/parsing succeeds
+        cleanupToolPath(previousPath);
         setToolPath(path);
-        setIsLoading(false);
+        setError(null);
+        
       } catch (err) {
-        setError('Failed to parse G-code file');
-        setIsLoading(false);
+        console.error("Error loading/parsing G-code:", err);
+        setError(`Failed to load G-code: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        cleanupToolPath(previousPath); // Cleanup if loading fails
+        setToolPath(null); // Ensure path is null on error
+      } finally {
+        setIsLoading(false); // Always stop loading
       }
     };
 
-    reader.onerror = () => {
-      setError('Failed to read file');
-      setIsLoading(false);
-    };
+    loadPath();
 
-    reader.readAsText(gcodeFile);
-
-    // Cleanup on unmount or when gcodeFile changes
+    // Return cleanup for the path active during this effect run
     return () => {
-      cleanupToolPath(toolPath);
+      cleanupToolPath(previousPath);
     };
-  }, [gcodeFile, toolPath, cleanupToolPath, parseGCode, createToolPath]);
+  }, [gcodeFile, cleanupToolPath, parseGCode, createToolPath]);
 
   return { toolPath, isLoading, error };
 }; 
